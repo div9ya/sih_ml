@@ -22,13 +22,13 @@ if not hasattr(ct, "_RemainderColsList"):
 # -------------------------
 # Flask app setup
 # -------------------------
-app = Flask(__name__)
+app = Flask(_name_)
 os.makedirs("static", exist_ok=True)
 
 # -------------------------
 # File Paths
 # -------------------------
-BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+BASE_DIR = os.path.dirname(os.path.abspath(_file_))
 INCIDENTS_FILE = os.path.join(BASE_DIR, "synthetic_incidents.geojson")
 CRIME_FILE = os.path.join(BASE_DIR, "crime_dataset_filtered.json")
 MODEL_FILE = os.path.join(BASE_DIR, "my_pipeline.pkl")
@@ -216,7 +216,7 @@ def check_dropoff(current_location, current_time):
 # --------------------------------
 # New Flask Route for anomaly detection (GET version)
 # --------------------------------
-# app = Flask(_name_)
+app = Flask(_name_)
 
 # Initialize globals
 last_location = (0.0, 0.0)
@@ -240,14 +240,16 @@ def update_location():
     dt = current_time - last_time
 
     status = "Normal"
-
     if dt > 300:  # 5 minutes threshold
-        # Show inactive since last_time
         status = f"Inactive since {time.strftime('%Y-%m-%d %H:%M:%S', time.localtime(last_time))}"
     else:
         speed = dist / dt if dt > 0 else 0
         if speed > 50:  # unrealistic jump
             status = "Sudden Location Jump"
+
+    # Store old location before updating
+    old_location = last_location
+    old_time = last_time
 
     # Update last location + time
     last_location, last_time = current_location, current_time
@@ -255,7 +257,7 @@ def update_location():
     return jsonify({
         "status": status,
         "current_location": {"lat": lat, "lon": lon},
-        "last_location": {"lat": last_location[0], "lon": last_location[1]},
+        "last_location": {"lat": old_location[0], "lon": old_location[1]},
         "time_elapsed_sec": round(dt, 2),
         "distance_m": round(dist, 2)
     })
@@ -343,5 +345,5 @@ def get_full_context():
         "final_prediction": final_prediction  # risk-aware prediction
     })
 
-if __name__ == "__main__":
+if _name_ == "_main_":
     app.run(debug=True)
