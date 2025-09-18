@@ -10,7 +10,7 @@ import datetime
 import pandas as pd
 import joblib
 import sklearn.compose._column_transformer as ct  # 👈 needed for patch
-
+import time
 # -------------------------
 # Patch missing class (_RemainderColsList)
 # -------------------------
@@ -176,6 +176,96 @@ def get_socio_crime_data(district, lat=None, lon=None):
 # -------------------------
 # Flask Endpoints
 # -------------------------
+
+
+# --------------------------------
+# Anomaly Detection Globals
+# --------------------------------
+import geopy.distance
+
+last_location = None
+last_time = None
+
+def check_dropoff(current_location, current_time):
+    global last_location, last_time
+
+    anomaly = "Normal"
+
+    if last_location is not None and last_time is not None:
+        dist = geopy.distance.distance(last_location, current_location).m
+        dt = current_time - last_time
+
+        # No update
+        if dt > 300:  # 5 min
+            anomaly = "Location Drop-off"
+        else:
+            speed = dist / dt if dt > 0 else 0
+            if speed > 50:  # unrealistic walking speed
+                anomaly = "Sudden Location Jump"
+
+    # ✅ Always update last location/time
+    last_location, last_time = current_location, current_time
+    return anomaly
+
+# --------------------------------
+# New Flask Route for anomaly detection
+# --------------------------------
+
+
+# --------------------------------
+# New Flask Route for anomaly detection (GET version)
+# --------------------------------
+app = Flask(_name_)
+
+# Initialize globals
+last_location = (0.0, 0.0)
+last_time = time.time()
+
+@app.route('/update_location', methods=['GET'])
+def update_location():
+    global last_location, last_time
+
+    try:
+        lat = float(request.args.get("lat"))
+        lon = float(request.args.get("lon"))
+    except:
+        return jsonify({"error": "Invalid or missing lat/lon"}), 400
+
+    current_location = (lat, lon)
+    current_time = time.time()
+
+    # Calculate distance + time difference
+    dist = geopy.distance.distance(last_location, current_location).m
+    dt = current_time - last_time
+
+    status = "Normal"
+
+    if dt > 300:  # 5 minutes threshold
+        # Show inactive since last_time
+        status = f"Inactive since {time.strftime('%Y-%m-%d %H:%M:%S', time.localtime(last_time))}"
+    else:
+        speed = dist / dt if dt > 0 else 0
+        if speed > 50:  # unrealistic jump
+            status = "Sudden Location Jump"
+
+    # Update last location + time
+    last_location, last_time = current_location, current_time
+
+    return jsonify({
+        "status": status,
+        "current_location": {"lat": lat, "lon": lon},
+        "last_location": {"lat": last_location[0], "lon": last_location[1]},
+        "time_elapsed_sec": round(dt, 2),
+        "distance_m": round(dist, 2)
+    })
+
+
+
+
+
+
+
+
 
 @app.route('/get_full_context', methods=['GET'])
 def get_full_context():
