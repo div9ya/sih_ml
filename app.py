@@ -216,7 +216,7 @@ def check_dropoff(current_location, current_time):
 # --------------------------------
 # New Flask Route for anomaly detection (GET version)
 # --------------------------------
-app = Flask(_name_)
+# app = Flask(_name_)
 
 # Initialize globals
 last_location = (0.0, 0.0)
