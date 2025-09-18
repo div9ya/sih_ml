@@ -103,7 +103,8 @@ def get_district_from_lat_lon(lat, lon):
     if response.status_code == 200:
         try:
             data = response.json()
-            return data.get("address", {}).get("county") or data.get("address", {}).get("state_district")
+            # Use state_district first for district-level name
+            return data.get("address", {}).get("state_district") or data.get("address", {}).get("county")
         except ValueError:
             return None
     return None
@@ -215,7 +216,7 @@ def check_dropoff(current_location, current_time):
 # --------------------------------
 # New Flask Route for anomaly detection (GET version)
 # --------------------------------
-#app = Flask(_name_)
+app = Flask(_name_)
 
 # Initialize globals
 last_location = (0.0, 0.0)
