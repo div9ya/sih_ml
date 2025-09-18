@@ -22,13 +22,13 @@ if not hasattr(ct, "_RemainderColsList"):
 # -------------------------
 # Flask app setup
 # -------------------------
-app = Flask(_name_)
+app = Flask(__name__)
 os.makedirs("static", exist_ok=True)
 
 # -------------------------
 # File Paths
 # -------------------------
-BASE_DIR = os.path.dirname(os.path.abspath(_file_))
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 INCIDENTS_FILE = os.path.join(BASE_DIR, "synthetic_incidents.geojson")
 CRIME_FILE = os.path.join(BASE_DIR, "crime_dataset_filtered.json")
 MODEL_FILE = os.path.join(BASE_DIR, "my_pipeline.pkl")
@@ -216,7 +216,7 @@ def check_dropoff(current_location, current_time):
 # --------------------------------
 # New Flask Route for anomaly detection (GET version)
 # --------------------------------
-app = Flask(_name_)
+# app = Flask(__name_)
 
 # Initialize globals
 last_location = (0.0, 0.0)
@@ -345,5 +345,5 @@ def get_full_context():
         "final_prediction": final_prediction  # risk-aware prediction
     })
 
-if _name_ == "_main_":
+if __name__ == "__main__":
     app.run(debug=True)
