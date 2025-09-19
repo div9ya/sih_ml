@@ -95,35 +95,37 @@ def compute_risk(lat, lon):
 # -------------------------
 API_KEY = "8f1c266212dee5e4d5e29c10f24e6ae2"
 
-# def get_district_from_lat_lon(lat, lon):
-#     url = "https://nominatim.openstreetmap.org/reverse"
-#     params = {"lat": lat, "lon": lon, "format": "json"}
-#     headers = {"User-Agent": "MyApp/10.0 (akshatsri2005@gmail.com)"}
-#     response = requests.get(url, params=params, headers=headers)
-#     if response.status_code == 200:
-#         try:
-#             data = response.json()
-#             # Use state_district first for district-level name
-#             return data.get("address", {}).get("state_district") or data.get("address", {}).get("county")
-#         except ValueError:
-#             return None
-#     return None
-
 def get_district_from_lat_lon(lat, lon):
-    API_KEY = "879eac2811954604b5272bcc319c0de7"
-    url = f"https://api.geoapify.com/v1/geocode/reverse?lat={lat}&lon={lon}&apiKey={API_KEY}"
-    response = requests.get(url)
-    if response.status_code == 200:
-        data = response.json()
-        if data['features']:
-            props = data['features'][0]['properties']
-            return props.get("state_district") or props.get("county")
-    return None
+    """
+    Returns a tuple (district, state). Uses Geoapify reverse geocode.
+    """
+    API_KEY_GEO = "879eac2811954604b5272bcc319c0de7"
+    url = f"https://api.geoapify.com/v1/geocode/reverse?lat={lat}&lon={lon}&apiKey={API_KEY_GEO}"
+    try:
+        response = requests.get(url, timeout=5)
+    except requests.RequestException:
+        return None, None
 
+    if response.status_code == 200:
+        try:
+            data = response.json()
+            if data.get('features'):
+                props = data['features'][0].get('properties', {})
+                # try several possible keys to maximize chance of match
+                district = props.get("state_district") or props.get("county") or props.get("city") or props.get("village")
+                state = props.get("state") or props.get("region")
+                return district, state
+        except ValueError:
+            return None, None
+    return None, None
 
 def get_weather_and_time(lat, lon):
     url = f"https://api.openweathermap.org/data/2.5/weather?lat={lat}&lon={lon}&appid={API_KEY}&units=metric"
-    response = requests.get(url)
+    try:
+        response = requests.get(url, timeout=5)
+    except requests.RequestException:
+        return {}
+
     if response.status_code != 200:
         return {}
 
@@ -167,33 +169,56 @@ def get_weather_and_time(lat, lon):
     }
 
 # -------------------------
-# Socio-crime data
+# Socio-crime data (UPDATED: accepts state fallback)
 # -------------------------
-def get_socio_crime_data(district, lat=None, lon=None):
-    matching_rows = crime_df[crime_df['district'].str.lower().str.contains(district.lower(), na=False)]
-    if not matching_rows.empty:
-        row = matching_rows.iloc[0].to_dict()
-    else:
+def get_socio_crime_data(district, state=None, lat=None, lon=None):
+    """
+    Try:
+      1) district-level match (contains, case-insensitive)
+      2) state-level fallback (mean of all rows in that state)
+      3) global average fallback
+    """
+    row = None
+
+    # 1) district-level (loose contains)
+    if district:
+        try:
+            matching_rows = crime_df[crime_df['district'].str.lower().str.contains(str(district).lower(), na=False)]
+        except Exception:
+            matching_rows = pd.DataFrame()
+        if not matching_rows.empty:
+            row = matching_rows.iloc[0].to_dict()
+
+    # 2) state-level fallback (mean of numeric columns)
+    if row is None and state:
+        try:
+            state_rows = crime_df[crime_df['state'].str.lower().str.contains(str(state).lower(), na=False)]
+        except Exception:
+            state_rows = pd.DataFrame()
+        if not state_rows.empty:
+            # use mean of numeric columns for state-level fallback
+            state_mean = state_rows.mean(numeric_only=True).to_dict()
+            row = {**state_mean}
+            row["district"] = district or "State Average"
+            row["state"] = state
+
+    # 3) global average fallback
+    if row is None:
         avg_values = crime_df.drop(columns=["district", "state"], errors="ignore").mean(numeric_only=True).to_dict()
         row = {**avg_values}
-        row["district"] = district
-        row["state"] = "Unknown"
+        row["district"] = district or "Unknown"
+        row["state"] = state or "Unknown"
+
+    # attach weather/time if requested
     if lat is not None and lon is not None:
         weather_time = get_weather_and_time(lat, lon)
         row.update(weather_time)
+
     return row
 
 # -------------------------
-# Flask Endpoints
-# -------------------------
-# -------------------------
-# Flask Endpoints
-# -------------------------
-
-
-# --------------------------------
 # Anomaly Detection Globals
-# --------------------------------
+# -------------------------
 import geopy.distance
 
 last_location = None
@@ -221,16 +246,8 @@ def check_dropoff(current_location, current_time):
     return anomaly
 
 # --------------------------------
-# New Flask Route for anomaly detection
+# Initialize globals for update_location route
 # --------------------------------
-
-
-# --------------------------------
-# New Flask Route for anomaly detection (GET version)
-# --------------------------------
-# app = Flask(__name_)
-
-# Initialize globals
 last_location = (0.0, 0.0)
 last_time = time.time()
 
@@ -274,14 +291,6 @@ def update_location():
         "distance_m": round(dist, 2)
     })
 
-
-
-
-
-
-
-
-
 @app.route('/get_full_context', methods=['GET'])
 def get_full_context():
     try:
@@ -293,15 +302,19 @@ def get_full_context():
     # ---- Risk + context ----
     risk_index = compute_risk(lat, lon)
     weather_time = get_weather_and_time(lat, lon)
-    district = get_district_from_lat_lon(lat, lon)
-    if not district:
-        return jsonify({"error": "Unable to determine district"}), 400
 
-    socio_crime = get_socio_crime_data(district, lat=lat, lon=lon)
+    # <-- UPDATED: unpack district and state -->
+    district, state = get_district_from_lat_lon(lat, lon)
+    if not district and not state:
+        return jsonify({"error": "Unable to determine district/state from coordinates"}), 400
+
+    # pass both district + state into socio-crime lookup
+    socio_crime = get_socio_crime_data(district, state=state, lat=lat, lon=lon)
 
     features = {
         "risk_index": risk_index,
         "district": district,
+        "state": state,
         "latitude": lat,
         "longitude": lon,
         **weather_time,
@@ -340,11 +353,11 @@ def get_full_context():
         fused_probs[label] = p_final
 
     # Renormalize
-    total = sum(fused_probs.values())
+    total = sum(fused_probs.values()) if fused_probs else 1
     fused_probs = {k: v / total for k, v in fused_probs.items()}
 
     # Final prediction
-    final_prediction = max(fused_probs, key=fused_probs.get)
+    final_prediction = max(fused_probs, key=fused_probs.get) if fused_probs else str(pred_class)
 
     # -------------------------
     # ✅ Return everything
