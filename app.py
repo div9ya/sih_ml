@@ -95,19 +95,31 @@ def compute_risk(lat, lon):
 # -------------------------
 API_KEY = "8f1c266212dee5e4d5e29c10f24e6ae2"
 
+# def get_district_from_lat_lon(lat, lon):
+#     url = "https://nominatim.openstreetmap.org/reverse"
+#     params = {"lat": lat, "lon": lon, "format": "json"}
+#     headers = {"User-Agent": "MyApp/10.0 (akshatsri2005@gmail.com)"}
+#     response = requests.get(url, params=params, headers=headers)
+#     if response.status_code == 200:
+#         try:
+#             data = response.json()
+#             # Use state_district first for district-level name
+#             return data.get("address", {}).get("state_district") or data.get("address", {}).get("county")
+#         except ValueError:
+#             return None
+#     return None
+
 def get_district_from_lat_lon(lat, lon):
-    url = "https://nominatim.openstreetmap.org/reverse"
-    params = {"lat": lat, "lon": lon, "format": "json"}
-    headers = {"User-Agent": "MyApp/10.0 (akshatsri2005@gmail.com)"}
-    response = requests.get(url, params=params, headers=headers)
+    API_KEY = "879eac2811954604b5272bcc319c0de7"
+    url = f"https://api.geoapify.com/v1/geocode/reverse?lat={lat}&lon={lon}&apiKey={API_KEY}"
+    response = requests.get(url)
     if response.status_code == 200:
-        try:
-            data = response.json()
-            # Use state_district first for district-level name
-            return data.get("address", {}).get("state_district") or data.get("address", {}).get("county")
-        except ValueError:
-            return None
+        data = response.json()
+        if data['features']:
+            props = data['features'][0]['properties']
+            return props.get("state_district") or props.get("county")
     return None
+
 
 def get_weather_and_time(lat, lon):
     url = f"https://api.openweathermap.org/data/2.5/weather?lat={lat}&lon={lon}&appid={API_KEY}&units=metric"
