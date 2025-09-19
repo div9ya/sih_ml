@@ -98,7 +98,7 @@ API_KEY = "8f1c266212dee5e4d5e29c10f24e6ae2"
 def get_district_from_lat_lon(lat, lon):
     url = "https://nominatim.openstreetmap.org/reverse"
     params = {"lat": lat, "lon": lon, "format": "json"}
-    headers = {"User-Agent": "MyApp/3.0 (div2020123@gmail.com)"}
+    headers = {"User-Agent": "MyApp/10.0 (akshatsri2005@gmail.com)"}
     response = requests.get(url, params=params, headers=headers)
     if response.status_code == 200:
         try:
